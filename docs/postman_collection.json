@@ -1,0 +1,219 @@
+{
+ "info": {
+  "name": "Factory Traffic API",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "variable": [
+  {
+   "key": "base",
+   "value": "http://127.0.0.1:8000"
+  }
+ ],
+ "item": [
+  {
+   "name": "Create junction",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/junctions",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"id\": \"A\",\n  \"name\": \"Junction A\"\n}"
+    }
+   }
+  },
+  {
+   "name": "List junctions",
+   "request": {
+    "method": "GET",
+    "url": "{{base}}/api/junctions",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ]
+   }
+  },
+  {
+   "name": "Get junction",
+   "request": {
+    "method": "GET",
+    "url": "{{base}}/api/junctions/A",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ]
+   }
+  },
+  {
+   "name": "Junction status",
+   "request": {
+    "method": "GET",
+    "url": "{{base}}/api/junctions/A/status",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ]
+   }
+  },
+  {
+   "name": "Sensor: vehicle arrived",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/sensor-events",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"event_id\": \"evt-10001\",\n  \"junction_id\": \"A\",\n  \"direction\": \"NORTH\",\n  \"event_type\": \"VEHICLE_ARRIVED\",\n  \"vehicle_id\": \"VH-501\",\n  \"vehicle_type\": \"TRUCK\",\n  \"sequence_no\": 1501,\n  \"timestamp\": \"2026-10-08T10:15:20Z\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Sensor: emergency EAST",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/sensor-events",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"event_id\": \"evt-20001\",\n  \"junction_id\": \"A\",\n  \"direction\": \"EAST\",\n  \"event_type\": \"VEHICLE_ARRIVED\",\n  \"vehicle_id\": \"AMB-1\",\n  \"vehicle_type\": \"EMERGENCY\",\n  \"sequence_no\": 1,\n  \"timestamp\": \"2026-10-08T10:15:20Z\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Sensor: vehicle cleared",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/sensor-events",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"event_id\": \"evt-10002\",\n  \"junction_id\": \"A\",\n  \"direction\": \"NORTH\",\n  \"event_type\": \"VEHICLE_CLEARED\",\n  \"vehicle_id\": \"VH-501\",\n  \"sequence_no\": 1502,\n  \"timestamp\": \"2026-10-08T10:15:20Z\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Command: manual WEST",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/junctions/A/commands",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"command\": \"MANUAL_GREEN_REQUEST\",\n  \"direction\": \"WEST\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Command: return to automatic",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/junctions/A/commands",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"command\": \"RETURN_TO_AUTOMATIC\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Controller ACK",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/controller-events",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"junction_id\": \"A\",\n  \"command_id\": \"cmd-1\",\n  \"status\": \"ACK\",\n  \"actual_state\": \"RED\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Controller OFFLINE",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/controller-events",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"junction_id\": \"A\",\n  \"device_type\": \"SIGNAL_CONTROLLER\",\n  \"direction\": \"SOUTH\",\n  \"status\": \"OFFLINE\"\n}"
+    }
+   }
+  },
+  {
+   "name": "Simulator auto-ack off",
+   "request": {
+    "method": "POST",
+    "url": "{{base}}/api/junctions/A/simulator",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "body": {
+     "mode": "raw",
+     "raw": "{\n  \"auto_ack\": false\n}"
+    }
+   }
+  },
+  {
+   "name": "History",
+   "request": {
+    "method": "GET",
+    "url": "{{base}}/api/junctions/A/history?limit=50",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ]
+   }
+  }
+ ]
+}

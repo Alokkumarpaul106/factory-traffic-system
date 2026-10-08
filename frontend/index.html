@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Factory Traffic Management</title>
+<style>
+*{box-sizing:border-box}body{font:14px system-ui,sans-serif;margin:0;background:#f3f4f6;color:#1b1f24}
+header{background:#1f2937;color:#fff;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;flex:1}select,input,button{font:inherit;padding:5px 8px}button{cursor:pointer}
+main{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;padding:12px}
+.card{background:#fff;border-radius:8px;padding:12px;box-shadow:0 1px 3px #0002}.card h2{font-size:14px;margin:0 0 8px}
+#banner div{padding:8px 16px;font-weight:600}.err{background:#fde2e2;color:#8a1111}.emg{background:#d1242f;color:#fff}
+.man{background:#fff1c2;color:#6a4b00}.ok{background:#dcfce7;color:#14532d}
+.x{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto 60px auto;gap:4px;text-align:center;align-items:center}
+.sig{padding:4px}.lamp{width:34px;height:34px;border-radius:50%;margin:0 auto 2px;border:2px solid #333}
+.GREEN{background:#2da44e}.YELLOW{background:#e3b341}.RED{background:#d1242f}.UNKNOWN{background:#9ca3af}
+.road{background:#374151;color:#fff;border-radius:6px;padding:4px;font-size:12px}small{display:block;color:#555}
+.bad{color:#d1242f;font-weight:700}.tag{display:inline-block;padding:2px 8px;border-radius:10px;background:#e5e7eb;margin:2px}
+.chip{display:inline-block;border:1px solid #bbb;border-radius:10px;padding:1px 6px;margin:1px;font-size:12px}
+.chip button{padding:0 4px;margin-left:3px}.row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;align-items:center}
+ul{margin:0;padding-left:16px;max-height:230px;overflow:auto;font-size:12px}.mut{color:#667;font-size:12px}
+</style></head><body>
+<header><h1>Factory Traffic Management &mdash; CSI Smart Tech</h1>
+<select id="jsel"></select><button id="newj">+ Create junction</button><span id="live" class="tag">connecting...</span></header>
+<div id="banner"></div>
+<main>
+<section class="card"><h2>Intersection (backend state)</h2><div id="xing" class="x"></div>
+<p class="mut">Big lamp = DESIRED (backend). Text below = ACTUAL confirmed by controller.</p>
+<div id="info"></div></section>
+<section class="card"><h2>Queues</h2><div id="queues"></div><h2 style="margin-top:10px">Alerts</h2><div id="alerts"></div>
+<h2 style="margin-top:10px">Pending controller commands</h2><div id="pending"></div></section>
+<section class="card"><h2>Manual control</h2>
+<div class="row" id="manual"></div><button id="auto">Return to AUTOMATIC</button><p class="mut" id="mstate"></p></section>
+<section class="card"><h2>Simulation</h2>
+<div class="row"><select id="sdir"></select><select id="stype"></select><input id="svid" size="8" placeholder="vehicle id">
+<button id="arrive">Vehicle arrives</button><button id="dup">Resend last event (duplicate)</button></div>
+<div class="mut">Click x to send VEHICLE_CLEARED for a queued vehicle (see Queues).</div>
+<div class="row"><b>Controller:</b><select id="dtype"><option>SIGNAL_CONTROLLER</option><option>JUNCTION_CONTROLLER</option><option>SENSOR</option></select>
+<select id="ddir"></select><button id="doff">OFFLINE</button><button id="don">ONLINE</button></div>
+<div class="row"><b>ACK:</b><select id="ackcmd"></select><select id="ackst"><option>RED</option><option>YELLOW</option><option>GREEN</option></select>
+<button id="ack">ACK</button><button id="nack">NACK</button></div>
+<label><input type="checkbox" id="autoack"> auto-ACK simulator (ticker acks every command)</label></section>
+<section class="card" style="grid-column:1/-1"><h2>Recent activity</h2><ul id="hist"></ul></section>
+</main>
+<script>
+const $=s=>document.querySelector(s), DIRS=["NORTH","SOUTH","EAST","WEST"],
+ TYPES=["EMERGENCY","TRUCK","FORKLIFT","EMPLOYEE_VEHICLE"];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let jid=null,lastEvent=null,busy=false;
+async function api(path,body){
+  const r=await fetch('/api'+path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);
+  let j=null;try{j=await r.json()}catch(e){}
+  if(!r.ok){const e=new Error(j&&(j.reason||j.detail||JSON.stringify(j))||'HTTP '+r.status);e.status=r.status;throw e}
+  return j}
+function toast(m,bad){$('#banner').dataset.t=m;const d=document.createElement('div');d.className=bad?'err':'ok';d.textContent=m;
+  $('#toast')?.remove();d.id='toast';$('#banner').prepend(d);setTimeout(()=>d.remove(),4000)}
+async function act(path,body,okmsg){try{const r=await api(path,body);toast(okmsg||'OK: '+(r&&r.status||r&&r.result||''));refresh()}
+  catch(e){toast('Failed: '+e.message,true)}}
+function opts(sel,list){sel.innerHTML=list.map(x=>`<option>${x}</option>`).join('')}
+['#sdir','#ddir'].forEach(s=>opts($(s),DIRS));opts($('#stype'),TYPES);
+$('#manual').innerHTML=DIRS.map(d=>`<button data-d="${d}">Green for ${d}</button>`).join('');
+$('#manual').onclick=e=>e.target.dataset.d&&act(`/junctions/${jid}/commands`,{command:'MANUAL_GREEN_REQUEST',direction:e.target.dataset.d},'Manual request accepted');
+$('#auto').onclick=()=>act(`/junctions/${jid}/commands`,{command:'RETURN_TO_AUTOMATIC'},'Returned to automatic');
+function sensor(ev){lastEvent=ev;act('/sensor-events',ev,'Sensor event sent')}
+const mk=(type,dir,vid,vt)=>({event_id:'evt-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),junction_id:jid,direction:dir,
+ event_type:type,vehicle_id:vid,...(vt?{vehicle_type:vt}:{}),sequence_no:Date.now(),timestamp:new Date().toISOString()});
+$('#arrive').onclick=()=>sensor(mk('VEHICLE_ARRIVED',$('#sdir').value,$('#svid').value||'VH-'+Math.floor(Math.random()*9000+1000),$('#stype').value));
+$('#dup').onclick=()=>lastEvent?act('/sensor-events',lastEvent,'Duplicate sent'):toast('Send an event first',true);
+$('#queues').onclick=e=>e.target.dataset.v&&sensor(mk('VEHICLE_CLEARED',e.target.dataset.dir,e.target.dataset.v));
+const dev=st=>act('/controller-events',{junction_id:jid,device_type:$('#dtype').value,direction:$('#ddir').value,status:st,timestamp:new Date().toISOString()},'Device '+st);
+$('#doff').onclick=()=>dev('OFFLINE');$('#don').onclick=()=>dev('ONLINE');
+const ack=st=>$('#ackcmd').value?act('/controller-events',{junction_id:jid,command_id:$('#ackcmd').value,status:st,actual_state:$('#ackst').value},'Controller event: '+st):toast('No pending command',true);
+$('#ack').onclick=()=>ack('ACK');$('#nack').onclick=()=>ack('NACK');
+$('#autoack').onchange=e=>act(`/junctions/${jid}/simulator`,{auto_ack:e.target.checked},'Simulator updated');
+$('#newj').onclick=()=>{const id=prompt('Junction id (e.g. A)','A');id&&act('/junctions',{id,name:'Junction '+id},'Junction created')};
+$('#jsel').onchange=e=>{jid=e.target.value;refresh()};
+function render(s,h){
+  const em=s.emergencies.length,b=[];
+  if(em)b.push(`<div class="emg">EMERGENCY: ${s.emergencies.map(e=>esc(e.vehicle_id)+' from '+e.direction).join(', ')} &mdash; step ${s.step}${s.step_remaining_s!=null?' ('+s.step_remaining_s+'s)':''}, phase ${s.phase||'-'}</div>`);
+  if(s.manual.active)b.push(`<div class="man">MANUAL OVERRIDE active for ${s.manual.phase} (expires ${new Date(s.manual.expires_at*1000).toLocaleTimeString()})</div>`);
+  if(s.mode==='DEGRADED')b.push('<div class="err">DEGRADED: junction held ALL RED. Fix devices, then Return to AUTOMATIC.</div>');
+  $('#banner').innerHTML=b.join('');
+  const sig=d=>{const de=s.desired_signals[d],ac=s.actual_signals[d];return `<div class="sig"><div class="lamp ${de}"></div><b>${d}</b><small>desired ${de}</small><small class="${de!==ac?'bad':''}">actual ${ac}${de!==ac?' (mismatch)':''}</small></div>`};
+  $('#xing').innerHTML=`<div></div>${sig('NORTH')}<div></div>${sig('WEST')}<div class="road">JUNCTION ${esc(s.junction_id)}<br>${s.step}</div>${sig('EAST')}<div></div>${sig('SOUTH')}<div></div>`;
+  $('#info').innerHTML=['mode: '+s.mode,'phase: '+(s.phase||'-'),'step: '+s.step+(s.step_remaining_s!=null?' ('+s.step_remaining_s+'s)':''),'controller: '+s.controller_status].map(t=>`<span class="tag">${t}</span>`).join('');
+  $('#queues').innerHTML=DIRS.map(d=>`<div><b>${d}: ${s.queues[d]}</b> ${s.queue_vehicles[d].map(v=>`<span class="chip">${esc(v.vehicle_id)} ${v.type}<button data-v="${esc(v.vehicle_id)}" data-dir="${d}">x</button></span>`).join('')}</div>`).join('');
+  $('#alerts').innerHTML=s.alerts.length?s.alerts.map(a=>`<span class="tag ${/OFFLINE|DEGRADED/.test(a)?'bad':''}">${esc(a)}</span>`).join(''):'<span class="mut">none</span>';
+  $('#pending').innerHTML=s.pending_commands.length?s.pending_commands.map(c=>`<span class="tag">${c.command_id}: ${c.direction}=${c.requested_state} (try ${c.attempts})</span>`).join(''):'<span class="mut">none</span>';
+  const cur=$('#ackcmd').value;$('#ackcmd').innerHTML=s.pending_commands.map(c=>`<option ${c.command_id===cur?'selected':''} value="${c.command_id}">${c.command_id} ${c.direction}=${c.requested_state}</option>`).join('');
+  $('#mstate').textContent=s.manual.active?'Manual override ACTIVE':'No manual override';$('#autoack').checked=s.simulator.auto_ack;
+  $('#hist').innerHTML=h.slice(0,40).map(x=>{const {junction_id,at,timestamp,event_type,...r}=x;return `<li><b>${event_type}</b> ${esc(Object.entries(r).map(([k,v])=>k+'='+v).join(' '))} <span class="mut">${new Date(timestamp).toLocaleTimeString()}</span></li>`}).join('')}
+async function refresh(){
+  if(busy)return;busy=true;
+  try{
+    const list=await api('/junctions');
+    $('#jsel').innerHTML=list.map(j=>`<option ${j.junction_id===jid?'selected':''}>${esc(j.junction_id)}</option>`).join('');
+    if(!list.length){$('#banner').innerHTML='<div class="man">No junctions yet. Click "+ Create junction".</div>';jid=null}
+    else{if(!jid||!list.find(j=>j.junction_id===jid)){jid=list[0].junction_id;$('#jsel').value=jid}
+      const [s,h]=await Promise.all([api('/junctions/'+jid),api('/junctions/'+jid+'/history?limit=40')]);render(s,h)}
+    $('#live').textContent='live '+new Date().toLocaleTimeString();$('#live').className='tag ok'
+  }catch(e){$('#live').textContent='OFFLINE';$('#live').className='tag err';
+    $('#banner').innerHTML=`<div class="err">${e.status===404?'Invalid junction':'Backend unavailable / request failed'}: ${esc(e.message)} (retrying...)</div>`}
+  busy=false}
+refresh();setInterval(refresh,1500);
+</script></body></html>
